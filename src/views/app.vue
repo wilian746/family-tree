@@ -1,5 +1,5 @@
 <template>
-  <div class="col-md-9 panel panel-default">
+  <section class="container-app">
     <tree ref="tree"
       v-model="currentData"
       :nodeTextDisplay="nodeTextDisplay"
@@ -28,21 +28,21 @@
       <template #popUp="{data,node}">
         <div class="btn-group-vertical">
           <button @click="addFor(data)" class="add">
-            ADICIONAR
+            <img src="../assets/add.svg">
           </button>
           <button @click="remove(data, node)" class="delete">
-            DELETAR
+            <img src="../assets/remove.svg">
           </button>
         </div>
       </template>
     </tree>
-  </div>
+  </section>
 </template>
 
 <script>
 import { tree } from 'vued3tree'
 import data from '../mock/family.json'
-import { getGremlin } from './greenConfiguration.js'
+import gremlins from 'gremlins.js/src/main'
 
 let currentId = 500
 
@@ -172,31 +172,92 @@ export default {
       const resetZoom = this.resetZoom.bind(this)
       const [treeDiv] = this.$el.getElementsByClassName('tree')
       const [gremlinsButton] = this.$el.getElementsByClassName('btn-danger')
-      var horde = getGremlin(gremlinsButton, treeDiv, { changeType, changeLayout, changeNode, changeNodeTextDisplay, resetZoom })
+      var horde = this.getGremlin(gremlinsButton, treeDiv, { changeType, changeLayout, changeNode, changeNodeTextDisplay, resetZoom })
       horde.after(() => { this.isUnderGremlinsAttack = false })
       horde.unleash()
       this.horde = horde
       this.isUnderGremlinsAttack = true
+    },
+    getGremlin (prohibited, element, { changeType, changeLayout, changeNodeTextDisplay, changeNode, resetZoom }) {
+      const horde = gremlins.createHorde()
+        .gremlin(gremlins.species.clicker().canClick((element) => {
+          if (prohibited === element) {
+            return false
+          }
+          switch (element.tagName) {
+            case 'circle':
+            case 'BUTTON':
+            case 'text':
+              return true
+
+            case 'INPUT':
+              return element.type === 'checkbox'
+          }
+          return false
+        }).maxNbTries(15))
+        .gremlin(function () {
+          console.log('gremlin changeType')
+          changeType()
+        })
+        .gremlin(function () {
+          console.log('gremlin changeLayout')
+          changeLayout()
+        })
+        .gremlin(function () {
+          console.log('gremlin changeNode')
+          changeNode()
+        })
+        .gremlin(function () {
+          console.log('gremlin changeNodeTextDisplay')
+          changeNodeTextDisplay()
+        })
+        .gremlin(function () {
+          console.log('gremlin resetZoom')
+          resetZoom()
+        })
+        .gremlin(function () {
+          console.log('gremlin click circle')
+          const circles = [...element.getElementsByClassName('node--internal')]
+          if (circles.length === 0) {
+            return
+          }
+          const idx = Math.round(Math.random() * (circles.length - 1))
+          const circle = circles[idx]
+          const evt = document.createEvent('MouseEvents')
+          evt.initMouseEvent('click', true, true, window, 0, 0, 0, 0, 0, false, false, false, false, 0, null)
+          circle.dispatchEvent(evt)
+        })
+        .strategy(gremlins.strategies.distribution()
+          .delay(100)
+          .distribution([
+            0.8,
+            0.04,
+            0.04,
+            0.04,
+            0.08
+          ])
+        )
+
+      return horde
     }
   }
 }
 </script>
 <style lang="scss">
-html, {
+html {
   &, body { display: block; width: 100%; height: 100%; }
 
   body { overflow: auto;
     #app { font-family: 'Avenir', Helvetica, Arial, sans-serif; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; text-align: center; color: #2c3e50; margin-top: 20px; }
 
-    .tree { height: 100vh; width: 100%;
-      .btn-group-vertical { display: block;
-        button { display: block; width: 100px; height: 25px; line-height: 25px; text-align: center; background: transparent; border: 1px solid #000; cursor: pointer;
-          &.add { $color: #0a4b0a; border-color: $color; color: $color; transition: all 0.3s ease;
-            &:hover{ background-color: lighten($color, 30%); color: #fff; }
-          }
-          &.delete { $color: #6b1111; border-color: $color; color: $color;
-            &:hover{ background-color: lighten($color, 30%); color: #fff; }
-          }
+    div.tree { height: 100vh; width: 100%;
+      div.pop-up-tree { transition: all 0.3s ease; }
+
+      div.btn-group-vertical { display: block;
+        button { display: flex; justify-content: center; align-items: center; width: 35px; height: 35px; background: transparent; border: none; cursor: pointer; border-radius: 55%; transition: all 0.3s ease;
+          &:hover { background-color: #cdcdcd; }
+
+          img { display: block; width: 70%; }
         }
       }
     }
