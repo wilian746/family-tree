@@ -5,11 +5,6 @@ Vue.use(VueRouter)
 
 const routes = [
   {
-    path: '/',
-    name: 'app',
-    component: () => import('../views/app.vue')
-  },
-  {
     path: '/family-tree',
     name: 'family-tree',
     component: () => import('../views/family-tree.vue')

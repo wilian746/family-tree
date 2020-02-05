@@ -72,6 +72,7 @@
 <script>
 /* eslint-disable */
 import go from 'gojs'
+import Vue from 'vue'
 var goJS = go.GraphObject.make
 
 export default {
@@ -81,8 +82,7 @@ export default {
     }
   },
   mounted() {
-    this.myDiagram =
-        goJS(go.Diagram, 'myDiagramDiv', // must be the ID or reference to div
+    this.myDiagram = goJS(go.Diagram, 'myDiagramDiv', // must be the ID or reference to div
           {
             maxSelectionCount: 1, // users can select only one part at a time
             validCycle: go.Diagram.CycleDestinationTree, // make sure users can only create trees
@@ -118,74 +118,36 @@ export default {
           });
 
       // when the document is modified, add a "*" to the title and enable the "Save" button
-      this.myDiagram.addDiagramListener("Modified", function(e) {
-        var button = document.getElementById("SaveButton");
-        if (button) button.disabled = !this.myDiagram.isModified;
-        var idx = document.title.indexOf("*");
-        if (this.myDiagram.isModified) {
-          if (idx < 0) document.title += "*";
-        } else {
-          if (idx >= 0) document.title = document.title.substr(0, idx);
+      this.myDiagram.addDiagramListener("Modified", this.onModified);
+
+      // manage boss info manually when a node or link is deleted from the diagram
+      this.myDiagram.addDiagramListener("SelectionDeleting", this.onSelectionDeleting);
+
+      // override TreeLayout.commitNodes to also modify the background brush based on the tree depth level
+      this.myDiagram.layout.commitNodes = () => {
+        var levelColors = ["#AC193D", "#2672EC", "#8C0095", "#5133AB", "#008299", "#D24726", "#008A00", "#094AB2"];
+
+        try {
+          if (this.myDiagram.layout) {
+            go.TreeLayout.prototype.commitNodes.call(this.myDiagram.layout);  // do the standard behavior
+            // then go through all of the vertexes and set their corresponding node's Shape.fill
+            // to a brush dependent on the TreeVertex.level value
+            if (this.myDiagram.layout.network) {
+              this.myDiagram.layout.network.vertexes.each(function(v) {
+                if (v.node) {
+                  var level = v.level % (levelColors.length);
+                  var color = levelColors[level];
+                  var shape = v.node.findObject("SHAPE");
+                  if (shape) shape.stroke = goJS(go.Brush, "Linear", { 0: color, 1: go.Brush.lightenBy(color, 0.05), start: go.Spot.Left, end: go.Spot.Right });
+                }
+              });
+          }
+          }
+        } catch (error) {
+          console.error(error)
         }
-      });
-
-      // // manage boss info manually when a node or link is deleted from the diagram
-      // this.myDiagram.addDiagramListener("SelectionDeleting", function(e) {
-      //   var part = e.subject.first(); // e.subject is the this.myDiagram.selection collection,
-      //   // so we'll get the first since we know we only have one selection
-      //   this.myDiagram.startTransaction("clear boss");
-      //   if (part instanceof go.Node) {
-      //     var it = part.findTreeChildrenNodes(); // find all child nodes
-      //     while (it.next()) { // now iterate through them and clear out the boss information
-      //       var child = it.value;
-      //       var bossText = child.findObject("boss"); // since the boss TextBlock is named, we can access it by name
-      //       if (bossText === null) return;
-      //       bossText.text = "";
-      //     }
-      //   } else if (part instanceof go.Link) {
-      //     var child = part.toNode;
-      //     var bossText = child.findObject("boss"); // since the boss TextBlock is named, we can access it by name
-      //     if (bossText === null) return;
-      //     bossText.text = "";
-      //   }
-      //   this.myDiagram.commitTransaction("clear boss");
-      // });
-
-
-      // var levelColors = ["#AC193D", "#2672EC", "#8C0095", "#5133AB",
-      //   "#008299", "#D24726", "#008A00", "#094AB2"];
-
-      // // override TreeLayout.commitNodes to also modify the background brush based on the tree depth level
-      // this.myDiagram.layout.commitNodes = function() {
-      //   go.TreeLayout.prototype.commitNodes.call(this.myDiagram.layout);  // do the standard behavior
-      //   // then go through all of the vertexes and set their corresponding node's Shape.fill
-      //   // to a brush dependent on the TreeVertex.level value
-      //   this.myDiagram.layout.network.vertexes.each(function(v) {
-      //     if (v.node) {
-      //       var level = v.level % (levelColors.length);
-      //       var color = levelColors[level];
-      //       var shape = v.node.findObject("SHAPE");
-      //       if (shape) shape.stroke = goJS(go.Brush, "Linear", { 0: color, 1: go.Brush.lightenBy(color, 0.05), start: go.Spot.Left, end: go.Spot.Right });
-      //     }
-      //   });
-      // };
-
-      // // when a node is double-clicked, add a child to it
-      // function nodeDoubleClick(e, obj) {
-      //   var clicked = obj.part;
-      //   if (clicked !== null) {
-      //     var thisemp = clicked.data;
-      //     this.myDiagram.startTransaction("add employee");
-      //     var newemp = {
-      //       name: "(new person)",
-      //       title: "",
-      //       comments: "",
-      //       parent: thisemp.key
-      //     };
-      //     this.myDiagram.model.addNodeData(newemp);
-      //     this.myDiagram.commitTransaction("add employee");
-      //   }
-      // }
+      }
+      this.nodeDoubleClick()
   },
   methods: {
     // Show the diagram's model in JSON format
@@ -203,6 +165,55 @@ export default {
         data.key = lastkey = k;
         return k;
       };
+    },
+    onModified(e) {
+      var button = document.getElementById("SaveButton");
+      if (button) button.disabled = !this.myDiagram.isModified;
+      var idx = document.title.indexOf("*");
+      if (this.myDiagram.isModified) {
+        if (idx < 0) document.title += "*";
+      } else {
+        if (idx >= 0) document.title = document.title.substr(0, idx);
+      }
+    },
+    onSelectionDeleting(e) {
+      if (e) {
+        var part = e.subject.first(); // e.subject is the this.myDiagram.selection collection,
+        // so we'll get the first since we know we only have one selection
+        this.myDiagram.startTransaction("clear boss");
+        if (part instanceof go.Node) {
+          var it = part.findTreeChildrenNodes(); // find all child nodes
+          while (it.next()) { // now iterate through them and clear out the boss information
+            var child = it.value;
+            var bossText = child.findObject("boss"); // since the boss TextBlock is named, we can access it by name
+            if (bossText === null) return;
+            bossText.text = "";
+          }
+        } else if (part instanceof go.Link) {
+          var child = part.toNode;
+          var bossText = child.findObject("boss"); // since the boss TextBlock is named, we can access it by name
+          if (bossText === null) return;
+          bossText.text = "";
+        }
+        this.myDiagram.commitTransaction("clear boss");
+      }
+    },
+    nodeDoubleClick(e, obj) {
+      if (e && obj) {
+        var clicked = obj.part;
+        if (clicked !== null) {
+          var thisemp = clicked.data;
+          this.myDiagram.startTransaction("add employee");
+          var newemp = {
+            name: "(new person)",
+            title: "",
+            comments: "",
+            parent: thisemp.key
+          };
+          this.myDiagram.model.addNodeData(newemp);
+          this.myDiagram.commitTransaction("add employee");
+        }
+      }
     }
   }
 }
